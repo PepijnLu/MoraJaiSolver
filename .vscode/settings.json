@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "mora jai solver.sln"
+    "dotnet.defaultSolution": "MoraJaiSolver.sln"
 }
