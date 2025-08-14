@@ -23,6 +23,7 @@ public class MoraJaiSolver : MonoBehaviour
     List<List<string>> uniqueBoardStates;
     List<List<string>> handledBoardStates;
     List<string> startState, setState;
+    [SerializeField] GameObject playSolveButtons;
     [SerializeField] bool oneSolveColor;
     [SerializeField] List<string> solveColors = new(){"red", "red", "red", "red"};
     [SerializeField] List<Image> cornerTiles;
@@ -119,6 +120,16 @@ public class MoraJaiSolver : MonoBehaviour
         //}
     }
 
+    public void Reset()
+    {
+        isSolved = false;
+        isSolving = false;
+        isPlaying = false;
+        foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
+        playSolveButtons.SetActive(true);
+        ResetBoard(setState);
+    }
+
     void ResetBoard(List<string> stateToResetTo)
     {
         for(int i = 0; i < board.Count; i++)
@@ -172,9 +183,21 @@ public class MoraJaiSolver : MonoBehaviour
     {
         if(!isSolving) 
         {
+            foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
+            playSolveButtons.SetActive(false);
+            colorPicker.SetActive(false);
             SaveStartState();
             StartCoroutine(AttemptSolve());
         }
+    }
+
+    public void Play()
+    {
+        foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
+        colorPicker.SetActive(false);
+        playSolveButtons.SetActive(false);
+        isPlaying = true;
+        SaveStartState();
     }
 
     void CorrectBoardColors()
@@ -187,28 +210,33 @@ public class MoraJaiSolver : MonoBehaviour
 
     public void ClickTile(int _tileNumber)
     {
-        if(isPlaying || isSolving)
+        if (isPlaying || isSolving)
         {
             string _color = board[_tileNumber - 1].tileColor;
             input = _tileNumber;
 
             HandleTileAction(_color, input);
+            if (!isSolved)
+            {
+                isSolved = CheckSolved(-1, isSolving);
+            }
         }
-        else
-        {
-            selectedTile = board[_tileNumber - 1];
-            selectedCornerTile = 0;
-            //Enable color picker
-            colorPicker.SetActive(true);
-        }
+            else
+            {
+                selectedTile = board[_tileNumber - 1];
+                selectedCornerTile = 0;
+                //Enable color picker
+                colorPicker.SetActive(true);
+            }
     }
 
 
     public void ClickCornerTile(int _corner)
     {
-        if(isPlaying)
+        if (isPlaying)
         {
             //Check if correct, if so, become that color
+            CheckSolved(_corner, true);
         }
         else
         {
@@ -225,15 +253,15 @@ public class MoraJaiSolver : MonoBehaviour
         {
             selectedTile.tileColor = color;
             CorrectBoardColors();
-            selectedTile = null;
             UpdateSetState(selectedTile.tileNumber - 1, color);
+            selectedTile = null;
         }
         else if(selectedCornerTile != 0)
         {
             solveColors[selectedCornerTile] = color;
             cornerTiles[selectedCornerTile].color = tileColors[color];
-            selectedCornerTile = 0;
             UpdateSetState(8 + selectedCornerTile + 1, color);
+            selectedCornerTile = 0;
         }
         colorPicker.SetActive(false);
     }
@@ -323,7 +351,7 @@ public class MoraJaiSolver : MonoBehaviour
                 SaveBoardState(_newInput, oldKey);
             }
 
-            if(!isSolved) isSolved = CheckSolved();
+            //if(!isSolved) isSolved = CheckSolved();
 
             if(!isSolved)
             {
@@ -587,14 +615,47 @@ public class MoraJaiSolver : MonoBehaviour
 
         CorrectBoardColors();
     }
-    public bool CheckSolved()
+    public bool CheckSolved(int _corner = -1, bool _clickedOnCorner = false)
     {
         bool solved = true;
-        
-        if(board[0].tileColor != solveColors[0]) solved = false;
-        if(board[2].tileColor != solveColors[1]) solved = false;
-        if(board[6].tileColor != solveColors[2]) solved = false;
-        if(board[8].tileColor != solveColors[3]) solved = false;
+
+        if (_corner == -1 || _corner == 0)
+        {
+            if (board[0].tileColor != solveColors[0])
+            {
+                solved = false;
+                cornerTiles[0].color = tileColors["grey"];
+            }
+            else if(_clickedOnCorner) cornerTiles[0].color = tileColors[solveColors[0]];
+        }
+
+        if (_corner == -1 || _corner == 1)
+        {
+            if (board[2].tileColor != solveColors[1])
+            {
+                solved = false;
+                cornerTiles[1].color = tileColors["grey"];
+            }
+            else if(_clickedOnCorner) cornerTiles[1].color = tileColors[solveColors[1]];
+        }
+        if (_corner == -1 || _corner == 2)
+        {
+            if (board[6].tileColor != solveColors[2])
+            {
+                solved = false;
+                cornerTiles[2].color = tileColors["grey"];
+            }
+            else if(_clickedOnCorner) cornerTiles[2].color = tileColors[solveColors[2]];
+        }
+        if (_corner == -1 || _corner == 3)
+        {
+            if (board[8].tileColor != solveColors[3])
+            {
+                solved = false;
+                cornerTiles[3].color = tileColors["grey"];
+            }
+            else if(_clickedOnCorner) cornerTiles[3].color = tileColors[solveColors[3]];
+        }
         
         return solved;
     }
