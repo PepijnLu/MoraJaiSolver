@@ -225,10 +225,10 @@ public class MoraJaiSolver : MonoBehaviour
             input = _tileNumber;
 
             HandleTileAction(_color, input);
-            if (!isSolved)
-            {
-                isSolved = CheckSolved(-1, isPlaying);
-            }
+            // if (!isSolved)
+            // {
+            //     isSolved = CheckSolved(-1, isPlaying);
+            // }
         }
         else
         {
@@ -285,15 +285,17 @@ public class MoraJaiSolver : MonoBehaviour
         isSolving = true;
         previousInputs = new();
 
-        while(solvedCorners.Count < 4 && !isSolved)
+        while(solvedCorners.Count < 4)
         {
             List<List<string>> currentUnhandledUniqueBoardStates = new();
-            foreach(List<string> _state in uniqueBoardStates)
+            foreach (List<string> _state in uniqueBoardStates)
             {
-                if(!IsHandledBoardState(_state)) 
+                if (!IsHandledBoardState(_state))
                 {
                     currentUnhandledUniqueBoardStates.Add(_state);
                 }
+                
+                if (isSolved) break;
             }
             
 
@@ -309,9 +311,11 @@ public class MoraJaiSolver : MonoBehaviour
 
                 attempts = handledBoardStateKeys.Count;
 
+                if (isSolved) break;
             }
 
-            if(isSolved || !isSolving) break;
+            if (isSolved || !isSolving) break;
+            if (yieldNull) yield return null;
         }
 
         if (isSolved)
@@ -361,11 +365,15 @@ public class MoraJaiSolver : MonoBehaviour
     {
         for(int i = 0; i < 9; i++)
         {
+            if (isSolved) break;
+
             int _newInput = i + 1;
             ResetBoard(_boardState);    
             string oldKey = StateToKey(_boardState);
 
             ClickTile(_newInput);
+            CheckSolved(-1, isPlaying);
+
             bool isRepeating = IsRepeatingBoardState(_newInput, oldKey);
 
             //if(!isSolved) isSolved = CheckSolved();
@@ -666,7 +674,16 @@ public class MoraJaiSolver : MonoBehaviour
             }
         }
 
-        if(solved) Debug.Log("Puzzle solved!");
+        if (solved)
+        {
+            Debug.Log("Puzzle solved!");
+            isSolved = true;
+
+            Debug.Log($"1: {board[0].tileColor} is {solveColors[0]}");
+            Debug.Log($"2: {board[1].tileColor} is {solveColors[1]}");
+            Debug.Log($"3: {board[2].tileColor} is {solveColors[2]}");
+            Debug.Log($"4: {board[3].tileColor} is {solveColors[3]}");
+        }
         return solved;
     }
 
@@ -693,7 +710,6 @@ public class MoraJaiSolver : MonoBehaviour
         }
 
         string newKey = StateToKey(_boardState);
-        Debug.Log("Key: " + newKey);
 
         bool isUnique = !uniqueBoardStateKeys.Contains(newKey);
         
