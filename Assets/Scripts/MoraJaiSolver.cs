@@ -320,9 +320,12 @@ public class MoraJaiSolver : MonoBehaviour
             solvedText.SetActive(true);
             helpNumbers.SetActive(true);
         }
+        else
+        {
+            Reset(true);
+            colorPicker.SetActive(false);
+        }
 
-        Reset(true);
-        colorPicker.SetActive(false);
         isSolving = false;
         yield return null;
     }
