@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine.UI;
 using UnityEngine;
 using System.Linq;
-using Unity.VisualScripting;
+using TMPro;
 
 public struct BoardStateRefs
 {
@@ -17,7 +17,6 @@ public class MoraJaiSolver : MonoBehaviour
 {
     //Orange takes majority or does nothing when equal
     [SerializeField] List<MoraTile> board;
-    [SerializeField] bool autoSolve;
     [SerializeField] bool yieldNull;
     [SerializeField] List<Image> solveButtons;
     List<List<string>> uniqueBoardStates;
@@ -26,13 +25,13 @@ public class MoraJaiSolver : MonoBehaviour
     [SerializeField] GameObject playSolveButtons;
     [SerializeField] bool oneSolveColor;
     [SerializeField] List<string> solveColors = new(){"red", "red", "red", "red"};
-    [SerializeField] List<Image> cornerTiles;
+    [SerializeField] List<Image> cornerTiles, cornerTilesBorders;
     Dictionary<string, Action<int>> tileActions;
     Dictionary<string, Color> tileColors;
     [SerializeField] int attempts;
     //1 through 9
     int input;
-    bool isSolved, isSolving, isPlaying;
+    [SerializeField] bool isSolved, isSolving, isPlaying;
     string solvedKey;
     List<int> solvedCorners = new();
     List<int> previousInputs;
@@ -43,6 +42,8 @@ public class MoraJaiSolver : MonoBehaviour
     MoraTile selectedTile;
     int selectedCornerTile;
     [SerializeField] GameObject colorPicker;
+    [SerializeField] GameObject solvedText, helpNumbers;
+    [SerializeField] TextMeshProUGUI sequenceText;
 
     void Awake()
     {
@@ -58,6 +59,7 @@ public class MoraJaiSolver : MonoBehaviour
             {
                 selectedTile = null;
             }
+            colorPicker.SetActive(false);
         }   
     }
 
@@ -94,20 +96,13 @@ public class MoraJaiSolver : MonoBehaviour
 
         newStateOldState.Add(newKey, boardStateRefs);
     }
-    void SaveBoardState(int _newInput, string oldKey)
+    void SaveBoardState(int _newInput, string oldKey, List<string> newState)
     {
-        List<string> boardState = new();
-        foreach(MoraTile _tile in board)
-        {
-            boardState.Add(_tile.tileColor);
-        }
+        string newKey = StateToKey(newState);
 
-        string newKey = StateToKey(boardState);
-
-        //if (!uniqueBoardStateKeys.Contains(newKey))
-        //{
-        uniqueBoardStates.Add(boardState);
+        uniqueBoardStates.Add(newState);
         uniqueBoardStateKeys.Add(newKey);
+
         BoardStateRefs boardStateRefs = new()
         {
             b_newKey = newKey,
@@ -116,18 +111,30 @@ public class MoraJaiSolver : MonoBehaviour
         };
 
         newStateOldState.Add(newKey, boardStateRefs);
-        //CorrectBoardColors();
-        //}
     }
 
-    public void Reset()
+    public void Reset(bool _hardReset = true)
     {
-        isSolved = false;
-        isSolving = false;
-        isPlaying = false;
+        Debug.Log("reset");
+
+        if (_hardReset)
+        {
+            isSolved = false;
+            isSolving = false;
+            isPlaying = false;
+            solvedText.SetActive(false);
+            helpNumbers.SetActive(false);
+            sequenceText.text = "";
+            playSolveButtons.SetActive(true);
+        }
+
+
         foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
-        playSolveButtons.SetActive(true);
         ResetBoard(setState);
+        // for(int i = 0; i < cornerTilesBorders.Count; i++)
+        // {
+        //     cornerTilesBorders[i].color = tileColors[setState[9 + i]];
+        // }
     }
 
     void ResetBoard(List<string> stateToResetTo)
@@ -185,7 +192,7 @@ public class MoraJaiSolver : MonoBehaviour
         {
             foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
             playSolveButtons.SetActive(false);
-            colorPicker.SetActive(false);
+            colorPicker.SetActive(false);       
             SaveStartState();
             StartCoroutine(AttemptSolve());
         }
@@ -210,6 +217,8 @@ public class MoraJaiSolver : MonoBehaviour
 
     public void ClickTile(int _tileNumber)
     {
+        if(isSolved) return;
+
         if (isPlaying || isSolving)
         {
             string _color = board[_tileNumber - 1].tileColor;
@@ -218,16 +227,16 @@ public class MoraJaiSolver : MonoBehaviour
             HandleTileAction(_color, input);
             if (!isSolved)
             {
-                isSolved = CheckSolved(-1, isSolving);
+                isSolved = CheckSolved(-1, isPlaying);
             }
         }
-            else
-            {
-                selectedTile = board[_tileNumber - 1];
-                selectedCornerTile = 0;
-                //Enable color picker
-                colorPicker.SetActive(true);
-            }
+        else
+        {
+            selectedTile = board[_tileNumber - 1];
+            selectedCornerTile = 0;
+            //Enable color picker
+            colorPicker.SetActive(true);
+        }
     }
 
 
@@ -237,8 +246,13 @@ public class MoraJaiSolver : MonoBehaviour
         {
             //Check if correct, if so, become that color
             CheckSolved(_corner, true);
+            if(CheckCornerTiles())
+            {
+                isSolved = true;
+                solvedText.SetActive(true);
+            }
         }
-        else
+        else if(!isSolving && !isSolved)
         {
             selectedTile = null;
             selectedCornerTile = _corner;
@@ -256,25 +270,23 @@ public class MoraJaiSolver : MonoBehaviour
             UpdateSetState(selectedTile.tileNumber - 1, color);
             selectedTile = null;
         }
-        else if(selectedCornerTile != 0)
+        else if(selectedCornerTile != -1)
         {
             solveColors[selectedCornerTile] = color;
-            cornerTiles[selectedCornerTile].color = tileColors[color];
+            cornerTilesBorders[selectedCornerTile].color = tileColors[color];
             UpdateSetState(8 + selectedCornerTile + 1, color);
-            selectedCornerTile = 0;
+            selectedCornerTile = -1;
         }
         colorPicker.SetActive(false);
     }
 
     IEnumerator AttemptSolve()
     {
-        Debug.Log("Attempt solve");
         isSolving = true;
         previousInputs = new();
 
-        while(solvedCorners.Count < 4)
+        while(solvedCorners.Count < 4 && !isSolved)
         {
-            Debug.Log("Solving");
             List<List<string>> currentUnhandledUniqueBoardStates = new();
             foreach(List<string> _state in uniqueBoardStates)
             {
@@ -283,11 +295,12 @@ public class MoraJaiSolver : MonoBehaviour
                     currentUnhandledUniqueBoardStates.Add(_state);
                 }
             }
+            
 
-            foreach(List<string> _state in currentUnhandledUniqueBoardStates)
+            foreach (List<string> _state in currentUnhandledUniqueBoardStates)
             {
-                //Debug.Log("New solve attempt");
-                StartCoroutine(TryAllTilesForBoardState(_state));
+                if(yieldNull) yield return StartCoroutine(TryAllTilesForBoardState(_state));
+                else StartCoroutine(TryAllTilesForBoardState(_state));
 
                 handledBoardStates.Add(_state); // keep for reference if needed
 
@@ -295,19 +308,21 @@ public class MoraJaiSolver : MonoBehaviour
                 handledBoardStateKeys.Add(newKey); // use for fast lookups
 
                 attempts = handledBoardStateKeys.Count;
-                
-                if(isSolved) 
-                {
-                    yield return RetrieveInputs(solvedKey);
-                    break;
-                }
+
             }
 
-            if(isSolved) break;
-            if(yieldNull) yield return null;
+            if(isSolved || !isSolving) break;
         }
 
-        Debug.Log("Solved");
+        if (isSolved)
+        {
+            yield return RetrieveInputs(solvedKey);
+            solvedText.SetActive(true);
+            helpNumbers.SetActive(true);
+        }
+
+        Reset(true);
+        colorPicker.SetActive(false);
         isSolving = false;
         yield return null;
     }
@@ -330,10 +345,13 @@ public class MoraJaiSolver : MonoBehaviour
         }
 
         Debug.Log($"Solved it in: {solvedInputs.Count}");
-        foreach (int _input in solvedInputs)
+        string sequenceString = "";
+        for(int i = 0; i < solvedInputs.Count; i++)
         {
-            Debug.Log("Input: " + _input);
+            if(i + 1 >= solvedInputs.Count) sequenceString += solvedInputs[i].ToString();
+            else sequenceString += solvedInputs[i] + ", ";
         }
+        sequenceText.text = sequenceString;
     }
 
     IEnumerator TryAllTilesForBoardState(List<string> _boardState)
@@ -341,26 +359,22 @@ public class MoraJaiSolver : MonoBehaviour
         for(int i = 0; i < 9; i++)
         {
             int _newInput = i + 1;
-            ResetBoard(_boardState);
+            ResetBoard(_boardState);    
             string oldKey = StateToKey(_boardState);
 
             ClickTile(_newInput);
-            bool isRepeating = IsRepeatingBoardState();
-            if(!isRepeating)
-            {
-                SaveBoardState(_newInput, oldKey);
-            }
+            bool isRepeating = IsRepeatingBoardState(_newInput, oldKey);
 
             //if(!isSolved) isSolved = CheckSolved();
 
-            if(!isSolved)
+            if (!isSolved)
             {
                 ResetBoard(_boardState);
             }
             else
             {
                 List<string> boardState = new();
-                foreach(MoraTile _tile in board)
+                foreach (MoraTile _tile in board)
                 {
                     boardState.Add(_tile.tileColor);
                 }
@@ -370,12 +384,13 @@ public class MoraJaiSolver : MonoBehaviour
 
         }  
 
-        if(yieldNull) yield return null;
+        if(false) yield return null;
     }
 
     void HandleTileAction(string _tileColor, int _input)
     {
         tileActions[_tileColor].Invoke(_input);
+        CorrectBoardColors();
     }
 
     //Red makes black -> red, white -> black
@@ -392,7 +407,6 @@ public class MoraJaiSolver : MonoBehaviour
                 _tile.tileColor = "black";
             }
         }
-        CorrectBoardColors();
     }
 
     //White just turns grey
@@ -454,7 +468,6 @@ public class MoraJaiSolver : MonoBehaviour
             else if(board[adjacentIndexes[i]].tileColor == "grey") board[adjacentIndexes[i]].tileColor = originalColor;
         }
         
-        CorrectBoardColors();
     }
 
     //Grey does nothing
@@ -527,7 +540,6 @@ public class MoraJaiSolver : MonoBehaviour
         if(mostFrequentColor != null)
         {
             board[input - 1].tileColor = mostFrequentColor;
-            CorrectBoardColors();
         }
     }
     //Rotates the row
@@ -549,7 +561,6 @@ public class MoraJaiSolver : MonoBehaviour
         board[startIndex + 1].tileColor = tile1color;
         board[startIndex + 2].tileColor = tile2color;
 
-        CorrectBoardColors();
     }
     //Rotates
     void HandlePinkTile(int _input)
@@ -587,7 +598,6 @@ public class MoraJaiSolver : MonoBehaviour
                 break; 
         }
 
-        CorrectBoardColors();
     }
     //Swaps color with the tile above
     void HandleYellowTile(int _input)
@@ -596,7 +606,6 @@ public class MoraJaiSolver : MonoBehaviour
 
         SwapTile(_input, _input - 3);
 
-        CorrectBoardColors();
     }
     //Swaps color with the tile below
     void HandleVioletTile(int _input)
@@ -604,59 +613,57 @@ public class MoraJaiSolver : MonoBehaviour
         if(input == 7 || input == 8 || input == 9) return;
 
         SwapTile(input, input + 3);
-
-        CorrectBoardColors();
     }
     //Behaves like the center tile (no effect if blue)
     void HandleBlueTile(int _input)
     {
         string centerColor = board[4].tileColor;
         if(centerColor != "blue") HandleTileAction(centerColor, _input);
-
-        CorrectBoardColors();
     }
-    public bool CheckSolved(int _corner = -1, bool _clickedOnCorner = false)
+    public bool CheckCornerTiles()
     {
         bool solved = true;
 
-        if (_corner == -1 || _corner == 0)
+        for(int i = 0; i < cornerTiles.Count; i++)
         {
-            if (board[0].tileColor != solveColors[0])
-            {
-                solved = false;
-                cornerTiles[0].color = tileColors["grey"];
-            }
-            else if(_clickedOnCorner) cornerTiles[0].color = tileColors[solveColors[0]];
+            if(cornerTiles[i].color != tileColors[solveColors[i]]) solved = false;
         }
 
-        if (_corner == -1 || _corner == 1)
+        return solved;
+    }
+
+    public bool CheckSolved(int _corner, bool _playing)
+    {
+        bool solved = true;
+
+        for (int i = 0; i < cornerTiles.Count; i++)
         {
-            if (board[2].tileColor != solveColors[1])
+            if (_corner == -1 || _corner == i)
             {
-                solved = false;
-                cornerTiles[1].color = tileColors["grey"];
+                int cornerToCheck = 0;
+                switch (i)
+                {
+                    case 1:
+                        cornerToCheck = 2;
+                        break;
+                    case 2:
+                        cornerToCheck = 6;
+                        break;
+                    case 3:
+                        cornerToCheck = 8;
+                        break;
+                }
+                if (board[cornerToCheck].tileColor != solveColors[i])
+                {
+                    solved = false;
+                    cornerTiles[i].color = tileColors["grey"];
+                    if (_playing && _corner != -1) Reset(false);
+                }
+                else if (_corner == i || !_playing) cornerTiles[i].color = tileColors[solveColors[i]];
             }
-            else if(_clickedOnCorner) cornerTiles[1].color = tileColors[solveColors[1]];
         }
-        if (_corner == -1 || _corner == 2)
-        {
-            if (board[6].tileColor != solveColors[2])
-            {
-                solved = false;
-                cornerTiles[2].color = tileColors["grey"];
-            }
-            else if(_clickedOnCorner) cornerTiles[2].color = tileColors[solveColors[2]];
-        }
-        if (_corner == -1 || _corner == 3)
-        {
-            if (board[8].tileColor != solveColors[3])
-            {
-                solved = false;
-                cornerTiles[3].color = tileColors["grey"];
-            }
-            else if(_clickedOnCorner) cornerTiles[3].color = tileColors[solveColors[3]];
-        }
-        
+
+        if(solved) Debug.Log("Puzzle solved!");
         return solved;
     }
 
@@ -674,7 +681,7 @@ public class MoraJaiSolver : MonoBehaviour
         CorrectBoardColors();
     }
 
-    bool IsRepeatingBoardState()
+    bool IsRepeatingBoardState(int _newInput, string oldKey)
     {
         List<string> _boardState = new();
         foreach (MoraTile _tile in board)
@@ -682,7 +689,13 @@ public class MoraJaiSolver : MonoBehaviour
             _boardState.Add(_tile.tileColor);
         }
 
-        return uniqueBoardStateKeys.Contains(StateToKey(_boardState));
+        string newKey = StateToKey(_boardState);
+        Debug.Log("Key: " + newKey);
+
+        bool isUnique = !uniqueBoardStateKeys.Contains(newKey);
+        
+        if(isUnique) SaveBoardState(_newInput, oldKey, _boardState);
+        return isUnique;
     }
 
     string StateToKey(List<string> state) => string.Join(",", state);
