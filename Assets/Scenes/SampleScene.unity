@@ -3853,7 +3853,6 @@ MonoBehaviour:
   - {fileID: 1469223640}
   - {fileID: 908466428}
   - {fileID: 1470990816}
-  autoSolve: 0
   yieldNull: 1
   solveButtons:
   - {fileID: 692340900}
@@ -3878,6 +3877,9 @@ MonoBehaviour:
   - {fileID: 1115593538}
   - {fileID: 1545918001}
   attempts: 0
+  isSolved: 0
+  isSolving: 0
+  isPlaying: 0
   colorPicker: {fileID: 635692966}
   solvedText: {fileID: 573109102}
   helpNumbers: {fileID: 1281103162}
@@ -4569,7 +4571,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 3
+  m_text: 6
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
