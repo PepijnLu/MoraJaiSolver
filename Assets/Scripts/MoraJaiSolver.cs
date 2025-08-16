@@ -410,6 +410,7 @@ public class MoraJaiSolver : MonoBehaviour
     {
         tileActions[_tileColor].Invoke(_input);
         CorrectBoardColors();
+        if (isPlaying) CheckSolved(-1, true);
     }
 
     //Red makes black -> red, white -> black
@@ -657,7 +658,7 @@ public class MoraJaiSolver : MonoBehaviour
 
         for (int i = 0; i < cornerTiles.Count; i++)
         {
-            if (_corner == -1 || _corner == i)
+            if (true)
             {
                 int cornerToCheck = 0;
                 switch (i)
@@ -676,7 +677,7 @@ public class MoraJaiSolver : MonoBehaviour
                 {
                     solved = false;
                     cornerTiles[i].color = tileColors["grey"];
-                    if (_playing && _corner != -1) ResetGame(false);
+                    if (_playing && _corner == i) ResetGame(false);
                 }
                 else if (_corner == i || !_playing) cornerTiles[i].color = tileColors[solveColors[i]];
             }
@@ -685,7 +686,7 @@ public class MoraJaiSolver : MonoBehaviour
         if (solved)
         {
             Debug.Log("Puzzle solved!");
-            isSolved = true;
+            if(isSolving) isSolved = true;
         }
         return solved;
     }
