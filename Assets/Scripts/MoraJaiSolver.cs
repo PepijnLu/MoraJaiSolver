@@ -5,6 +5,8 @@ using UnityEngine.UI;
 using UnityEngine;
 using System.Linq;
 using TMPro;
+using UnityEditor;
+using System.Text.RegularExpressions;
 
 public struct BoardStateRefs
 {
@@ -15,51 +17,41 @@ public struct BoardStateRefs
 
 public class MoraJaiSolver : MonoBehaviour
 {
-    //Orange takes majority or does nothing when equal
     [SerializeField] List<MoraTile> board;
-    [SerializeField] bool yieldNull;
-    [SerializeField] List<Image> solveButtons;
-    List<List<string>> uniqueBoardStates;
-    List<List<string>> handledBoardStates;
-    List<string> startState, setState;
-    [SerializeField] GameObject playSolveButtons;
-    [SerializeField] bool oneSolveColor;
+    [SerializeField] List<Image> cornerTiles, cornerTilesBorders, solveButtons;
     [SerializeField] List<string> solveColors = new(){"red", "red", "red", "red"};
-    [SerializeField] List<Image> cornerTiles, cornerTilesBorders;
+    [SerializeField] GameObject playSolveButtons, colorPicker, helpNumbers, settingsMenu, playAfterSolveIndicator;
+    [SerializeField] TextMeshProUGUI sequenceText, solvedText;
+    [SerializeField] int attempts, attemptsPerFrame;
     Dictionary<string, Action<int>> tileActions;
     Dictionary<string, Color> tileColors;
-    [SerializeField] int attempts;
-    //1 through 9
-    int input;
-    [SerializeField] bool isSolved, isSolving, isPlaying;
-    string solvedKey;
-    List<int> solvedCorners = new();
-    List<int> previousInputs;
-    public static MoraJaiSolver instance;
-    HashSet<string> uniqueBoardStateKeys;
-    HashSet<string> handledBoardStateKeys;
     Dictionary<string, BoardStateRefs> newStateOldState;
+    HashSet<string> uniqueBoardStateKeys;
+    List<string> startState, setState;
+    Queue<string> stateQueue;
     MoraTile selectedTile;
-    int selectedCornerTile;
-    [SerializeField] GameObject colorPicker;
-    [SerializeField] GameObject solvedText, helpNumbers;
-    [SerializeField] TextMeshProUGUI sequenceText;
+    public bool isPlaying, isSolving, isSolved;
+    bool playAfterSolve = true, bufferReset;
+    int input, selectedCornerTile;
+    string solvedKey;   
 
     void Awake()
-    {
-        instance = this;   
+    {  
         InstantiateDictionary();   
     }
 
     void Update()
     {
-        if(Input.GetKeyDown(KeyCode.Escape))
+        if (Input.GetKeyDown(KeyCode.Escape))
         {
-            if(selectedTile != null)
+            if (selectedTile != null)
             {
                 selectedTile = null;
             }
-            colorPicker.SetActive(false);
+
+            if (colorPicker.activeSelf) colorPicker.SetActive(false);
+            else if (settingsMenu.activeSelf) settingsMenu.SetActive(false);
+            else settingsMenu.SetActive(true);
         }   
     }
 
@@ -69,22 +61,23 @@ public class MoraJaiSolver : MonoBehaviour
     }
     void SaveStartState()
     {
-        startState = new();
-        uniqueBoardStates = new();
-        handledBoardStates = new();
         uniqueBoardStateKeys = new();
-        handledBoardStateKeys = new();
         newStateOldState = new();
         attempts = 0;
 
         isSolved = false;
+
+        stateQueue = new();
+
+        startState = new();
         foreach(MoraTile _tile in board)
         {
             startState.Add(_tile.tileColor);
         }
 
-        uniqueBoardStates.Add(startState);
         string newKey = StateToKey(startState);
+        stateQueue.Enqueue(newKey); 
+
         uniqueBoardStateKeys.Add(newKey);
 
         BoardStateRefs boardStateRefs = new()
@@ -96,33 +89,32 @@ public class MoraJaiSolver : MonoBehaviour
 
         newStateOldState.Add(newKey, boardStateRefs);
     }
-    void SaveBoardState(int _newInput, string oldKey, List<string> newState)
+    void SaveBoardState(int _newInput, string oldKey, string newStateKey)
     {
-        string newKey = StateToKey(newState);
-
-        uniqueBoardStates.Add(newState);
-        uniqueBoardStateKeys.Add(newKey);
+        stateQueue.Enqueue(newStateKey);
+        uniqueBoardStateKeys.Add(newStateKey);
 
         BoardStateRefs boardStateRefs = new()
         {
-            b_newKey = newKey,
+            b_newKey = newStateKey,
             b_oldKey = oldKey,
             b_input = _newInput
         };
 
-        newStateOldState.Add(newKey, boardStateRefs);
+        newStateOldState.Add(newStateKey, boardStateRefs);
     }
 
-    public void Reset(bool _hardReset = true)
+    void ResetGame(bool _hardReset = true)
     {
         Debug.Log("reset");
+        bufferReset = false;
 
         if (_hardReset)
         {
             isSolved = false;
             isSolving = false;
             isPlaying = false;
-            solvedText.SetActive(false);
+            solvedText.text = "";
             helpNumbers.SetActive(false);
             sequenceText.text = "";
             playSolveButtons.SetActive(true);
@@ -131,10 +123,12 @@ public class MoraJaiSolver : MonoBehaviour
 
         foreach(Image _img in cornerTiles) _img.color = tileColors["grey"];
         ResetBoard(setState);
-        // for(int i = 0; i < cornerTilesBorders.Count; i++)
-        // {
-        //     cornerTilesBorders[i].color = tileColors[setState[9 + i]];
-        // }
+    }
+
+    public void ResetButton()
+    {
+        if (isSolving) bufferReset = true;
+        else ResetGame(true);
     }
 
     void ResetBoard(List<string> stateToResetTo)
@@ -143,7 +137,6 @@ public class MoraJaiSolver : MonoBehaviour
         {
             board[i].tileColor = stateToResetTo[i];
         }
-        solvedCorners.Clear();
         foreach(Image _img in solveButtons)
         {
             _img.color = tileColors["white"];
@@ -207,6 +200,37 @@ public class MoraJaiSolver : MonoBehaviour
         SaveStartState();
     }
 
+    public void Settings()
+    {
+        if (settingsMenu.activeSelf) settingsMenu.SetActive(false);
+        else settingsMenu.SetActive(true);
+    }
+
+    public void ChangeAttemptsPerFrame(TMP_InputField _inputField)
+    {
+        string digitsOnly = Regex.Replace(_inputField.text, "[^0-9]", "");
+        int newAttempts;
+
+        // If empty or only zeros, return "1"
+        if (string.IsNullOrEmpty(digitsOnly)) newAttempts = 1;
+        else
+        {
+            newAttempts = int.Parse(digitsOnly);
+            if (newAttempts == 0) newAttempts = 1;
+        }
+
+        _inputField.text = newAttempts.ToString();
+        attemptsPerFrame = newAttempts;
+    }
+
+    public void TogglePlayAfterSolve()
+    {
+        if (playAfterSolve) playAfterSolve = false;
+        else playAfterSolve = true;
+
+        playAfterSolveIndicator.SetActive(playAfterSolve);
+    }
+
     void CorrectBoardColors()
     {
         foreach(MoraTile _tile in board)
@@ -225,10 +249,6 @@ public class MoraJaiSolver : MonoBehaviour
             input = _tileNumber;
 
             HandleTileAction(_color, input);
-            // if (!isSolved)
-            // {
-            //     isSolved = CheckSolved(-1, isPlaying);
-            // }
         }
         else
         {
@@ -249,7 +269,7 @@ public class MoraJaiSolver : MonoBehaviour
             if(CheckCornerTiles())
             {
                 isSolved = true;
-                solvedText.SetActive(true);
+                solvedText.text = "Solved!";
             }
         }
         else if(!isSolving && !isSolved)
@@ -283,51 +303,42 @@ public class MoraJaiSolver : MonoBehaviour
     IEnumerator AttemptSolve()
     {
         isSolving = true;
-        previousInputs = new();
+        attempts = 0;
 
-        while(solvedCorners.Count < 4)
+        while (stateQueue.Count > 0 && !isSolved)
         {
-            List<List<string>> currentUnhandledUniqueBoardStates = new();
-            foreach (List<string> _state in uniqueBoardStates)
+            int statesThisFrame = 0;
+
+            while (stateQueue.Count > 0 && statesThisFrame < attemptsPerFrame && !isSolved)
             {
-                if (!IsHandledBoardState(_state))
-                {
-                    currentUnhandledUniqueBoardStates.Add(_state);
-                }
-                
-                if (isSolved) break;
-            }
-            
-
-            foreach (List<string> _state in currentUnhandledUniqueBoardStates)
-            {
-                if(yieldNull) yield return StartCoroutine(TryAllTilesForBoardState(_state));
-                else StartCoroutine(TryAllTilesForBoardState(_state));
-
-                handledBoardStates.Add(_state); // keep for reference if needed
-
-                string newKey = StateToKey(_state);
-                handledBoardStateKeys.Add(newKey); // use for fast lookups
-
-                attempts = handledBoardStateKeys.Count;
-
-                if (isSolved) break;
+                attempts++;
+                TryAllTilesForBoardState(stateQueue.Dequeue());
+                statesThisFrame++;
             }
 
-            if (isSolved || !isSolving) break;
-            if (yieldNull) yield return null;
+            if (bufferReset) break;
+            yield return null;
         }
 
         if (isSolved)
         {
             yield return RetrieveInputs(solvedKey);
-            solvedText.SetActive(true);
+            solvedText.text = "Solved!";
             helpNumbers.SetActive(true);
+            if (playAfterSolve)
+            {
+                ResetGame(false);
+                isPlaying = true;
+                isSolved = false;
+            }
+        }
+        else if (!bufferReset)
+        {
+            solvedText.text = "No solution.";
         }
         else
         {
-            Reset(true);
-            colorPicker.SetActive(false);
+            ResetGame(true);
         }
 
         isSolving = false;
@@ -361,22 +372,21 @@ public class MoraJaiSolver : MonoBehaviour
         sequenceText.text = sequenceString;
     }
 
-    IEnumerator TryAllTilesForBoardState(List<string> _boardState)
+    void TryAllTilesForBoardState(string _stateKey)
     {
-        for(int i = 0; i < 9; i++)
+        List<string> _boardState = KeyToState(_stateKey);
+        
+        for (int i = 0; i < 9; i++)
         {
             if (isSolved) break;
 
             int _newInput = i + 1;
-            ResetBoard(_boardState);    
-            string oldKey = StateToKey(_boardState);
 
+            ResetBoard(_boardState);
             ClickTile(_newInput);
             CheckSolved(-1, isPlaying);
 
-            bool isRepeating = IsRepeatingBoardState(_newInput, oldKey);
-
-            //if(!isSolved) isSolved = CheckSolved();
+            IsRepeatingBoardState(_newInput, _stateKey);
 
             if (!isSolved)
             {
@@ -394,8 +404,6 @@ public class MoraJaiSolver : MonoBehaviour
             }
 
         }  
-
-        if(false) yield return null;
     }
 
     void HandleTileAction(string _tileColor, int _input)
@@ -668,7 +676,7 @@ public class MoraJaiSolver : MonoBehaviour
                 {
                     solved = false;
                     cornerTiles[i].color = tileColors["grey"];
-                    if (_playing && _corner != -1) Reset(false);
+                    if (_playing && _corner != -1) ResetGame(false);
                 }
                 else if (_corner == i || !_playing) cornerTiles[i].color = tileColors[solveColors[i]];
             }
@@ -678,11 +686,6 @@ public class MoraJaiSolver : MonoBehaviour
         {
             Debug.Log("Puzzle solved!");
             isSolved = true;
-
-            Debug.Log($"1: {board[0].tileColor} is {solveColors[0]}");
-            Debug.Log($"2: {board[1].tileColor} is {solveColors[1]}");
-            Debug.Log($"3: {board[2].tileColor} is {solveColors[2]}");
-            Debug.Log($"4: {board[3].tileColor} is {solveColors[3]}");
         }
         return solved;
     }
@@ -713,15 +716,14 @@ public class MoraJaiSolver : MonoBehaviour
 
         bool isUnique = !uniqueBoardStateKeys.Contains(newKey);
         
-        if(isUnique) SaveBoardState(_newInput, oldKey, _boardState);
+        if(isUnique) SaveBoardState(_newInput, oldKey, newKey);
         return isUnique;
     }
 
     string StateToKey(List<string> state) => string.Join(",", state);
-    bool IsHandledBoardState(List<string> state)
+    List<string> KeyToState(string key)
     {
-        string key = StateToKey(state);
-        return handledBoardStateKeys.Contains(key);
+        return key.Split(',').ToList();
     }
 
     string GetMostFrequentOrNull(List<string> items)
